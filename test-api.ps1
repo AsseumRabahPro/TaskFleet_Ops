@@ -46,11 +46,31 @@ function Invoke-ApiRequest {
         }
 
         $resp = $_.Exception.Response
-        $reader = New-Object System.IO.StreamReader($resp.GetResponseStream())
-        $errorBody = $reader.ReadToEnd()
+        $errorBody = ""
+        $statusCode = 0
+
+        # PowerShell 7 (Linux/macOS runner): HttpResponseMessage
+        if ($resp.GetType().FullName -eq "System.Net.Http.HttpResponseMessage") {
+            $statusCode = [int]$resp.StatusCode
+            if ($null -ne $resp.Content) {
+                $errorBody = $resp.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+            }
+        }
+        # Windows PowerShell: HttpWebResponse with GetResponseStream()
+        elseif ($resp.PSObject.Methods.Name -contains "GetResponseStream") {
+            $statusCode = [int]$resp.StatusCode
+            $reader = New-Object System.IO.StreamReader($resp.GetResponseStream())
+            $errorBody = $reader.ReadToEnd()
+        }
+        else {
+            $statusCode = [int]$resp.StatusCode
+            if ($null -ne $resp.Content) {
+                $errorBody = [string]$resp.Content
+            }
+        }
 
         return [PSCustomObject]@{
-            StatusCode = [int]$resp.StatusCode
+            StatusCode = $statusCode
             Body = $errorBody
         }
     }
