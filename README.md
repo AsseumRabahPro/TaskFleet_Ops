@@ -20,9 +20,10 @@ Projet portfolio démontrant la conteneurisation et l'orchestration d'une API RE
 7. [Kubernetes](#kubernetes)
 8. [Pourquoi Kubernetes ?](#pourquoi-kubernetes-)
 9. [Démonstration](#démonstration)
-10. [Scripts utilitaires](#scripts-utilitaires)
-11. [Tests](#tests)
-12. [Variables d'environnement](#variables-denvironnement)
+10. [CI/CD (GitHub Actions)](#cicd-github-actions)
+11. [Scripts utilitaires](#scripts-utilitaires)
+12. [Tests](#tests)
+13. [Variables d'environnement](#variables-denvironnement)
 
 ---
 
@@ -395,6 +396,40 @@ kubectl get hpa todo-backend-hpa --watch
 
 # Arrêter la charge
 kubectl delete pod load-generator
+```
+
+---
+
+## CI/CD (GitHub Actions)
+
+Le pipeline est défini dans `.github/workflows/ci-cd.yml` et comporte 3 jobs :
+
+1. `ci` (push + pull_request)
+  - Build Docker Compose
+  - Attente de `GET /health`
+  - Exécution de `test-api.ps1`
+2. `publish` (push sur `main` + manual run)
+  - Build de l'image backend
+  - Push sur `ghcr.io/<owner>/taskfleet-ops-backend`
+  - Tags : `latest` (branche par défaut) + `sha-<commit>`
+3. `deploy` (manual run uniquement)
+  - Applique `kubectl apply -f k8s/`
+  - Met à jour l'image du Deployment backend avec le tag SHA
+  - Vérifie le rollout et affiche pods/services/ingress/hpa
+
+### Secrets GitHub requis
+
+- `KUBE_CONFIG_BASE64` (optionnel, requis seulement pour le job `deploy`)
+  - Contient le kubeconfig encodé en base64
+  - Génération : `base64 -w 0 ~/.kube/config` (Linux) ou équivalent PowerShell
+
+### Déclenchement
+
+```bash
+# CI sur PR/push: automatique
+
+# Déclenchement manuel (avec déploiement)
+# GitHub > Actions > CI-CD > Run workflow > cocher "deploy"
 ```
 
 ---
