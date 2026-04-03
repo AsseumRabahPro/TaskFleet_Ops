@@ -96,7 +96,7 @@ jobs:
   deploy:
     name: CD - Deploy to Kubernetes (manual)
     needs: publish
-    if: github.event_name == 'workflow_dispatch' && inputs.deploy == true && secrets.KUBE_CONFIG_BASE64 != ''
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy == true
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -108,6 +108,15 @@ jobs:
 
       - name: Set up kubectl
         uses: azure/setup-kubectl@v4
+
+      - name: Validate kubeconfig secret
+        env:
+          KUBE_CONFIG_BASE64: ${{ secrets.KUBE_CONFIG_BASE64 }}
+        run: |
+          if [ -z "$KUBE_CONFIG_BASE64" ]; then
+            echo "KUBE_CONFIG_BASE64 secret is missing. Add it in GitHub repository secrets."
+            exit 1
+          fi
 
       - name: Configure kubeconfig
         run: |
