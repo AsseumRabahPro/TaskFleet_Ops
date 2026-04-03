@@ -22,6 +22,8 @@ function Invoke-KubernetesFlow {
     kubectl apply -f k8s/service-postgres.yaml
     kubectl apply -f k8s/deployment-backend.yaml
     kubectl apply -f k8s/service-backend.yaml
+    kubectl apply -f k8s/ingress.yaml
+    kubectl apply -f k8s/hpa.yaml
 
     Write-Host "[INFO] Mise a jour de l'image du backend dans le Deployment..." -ForegroundColor Cyan
     kubectl set image deployment/todo-backend backend=$ImageName

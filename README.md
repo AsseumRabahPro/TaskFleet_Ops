@@ -13,13 +13,16 @@ Projet portfolio démontrant la conteneurisation et l'orchestration d'une API RE
 
 1. [Vue d'ensemble](#vue-densemble)
 2. [Prérequis](#prérequis)
-3. [Structure du projet](#structure-du-projet)
-4. [Backend Flask](#backend-flask)
-5. [Docker Compose](#docker-compose)
-6. [Kubernetes](#kubernetes)
-7. [Scripts utilitaires](#scripts-utilitaires)
-8. [Tests](#tests)
-9. [Variables d'environnement](#variables-denvironnement)
+3. [Architecture](#architecture)
+4. [Structure du projet](#structure-du-projet)
+5. [Backend Flask](#backend-flask)
+6. [Docker Compose](#docker-compose)
+7. [Kubernetes](#kubernetes)
+8. [Pourquoi Kubernetes ?](#pourquoi-kubernetes-)
+9. [Démonstration](#démonstration)
+10. [Scripts utilitaires](#scripts-utilitaires)
+11. [Tests](#tests)
+12. [Variables d'environnement](#variables-denvironnement)
 
 ---
 
@@ -45,6 +48,50 @@ Projet portfolio démontrant la conteneurisation et l'orchestration d'une API RE
 
 ---
 
+## Architecture
+
+```
+                        ┌─────────────────────────────────────────────────────────┐
+                        │                  Kubernetes Cluster                     │
+                        │                                                         │
+  Client HTTP           │  ┌──────────┐     ┌─────────────────────────────────┐  │
+  ──────────────────────┼─▶│  Ingress │────▶│   Service: todo-backend-service │  │
+  todo-api.local:80     │  │  (nginx) │     │   (NodePort :30080)             │  │
+  ou <node-ip>:30080    │  └──────────┘     └────────────┬────────────────────┘  │
+                        │                               │                         │
+                        │              ┌────────────────▼──────────────┐          │
+                        │              │  HPA: todo-backend-hpa        │          │
+                        │              │  (2–5 replicas, seuil 70% CPU)│          │
+                        │              └────────────────┬──────────────┘          │
+                        │                               │                         │
+                        │          ┌────────────────────▼────────────────────┐   │
+                        │          │  Deployment: todo-backend (3 replicas)  │   │
+                        │          │  ┌──────────┐┌──────────┐┌──────────┐  │   │
+                        │          │  │  Pod 1   ││  Pod 2   ││  Pod 3   │  │   │
+                        │          │  │ :5000    ││ :5000    ││ :5000    │  │   │
+                        │          │  └────┬─────┘└────┬─────┘└────┬────┘  │   │
+                        │          └───────┼────────────┼───────────┼───────┘   │
+                        │                  └────────────▼───────────┘           │
+                        │                  ┌────────────────────────┐           │
+                        │                  │  Service: postgres      │           │
+                        │                  │  (ClusterIP :5432)     │           │
+                        │                  └────────────┬───────────┘           │
+                        │                  ┌────────────▼───────────┐           │
+                        │                  │  Deployment: postgres   │           │
+                        │                  │  (1 replica)            │           │
+                        │                  └────────────────────────┘           │
+                        │                                                         │
+                        │  ╔══════════════╗   ╔════════════════╗                 │
+                        │  ║  ConfigMap   ║   ║     Secret     ║                 │
+                        │  ║ DB_HOST      ║   ║ DB_USER        ║                 │
+                        │  ║ DB_PORT      ║   ║ DB_PASSWORD    ║                 │
+                        │  ║ DB_NAME      ║   ║ POSTGRES_PASS  ║                 │
+                        │  ╚══════════════╝   ╚════════════════╝                 │
+                        └─────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## Structure du projet
 
 ```text
@@ -56,12 +103,14 @@ Projet portfolio démontrant la conteneurisation et l'orchestration d'une API RE
 │   ├── models.py          # Modèle Task
 │   └── routes.py          # Endpoints REST
 ├── k8s/
-│   ├── configmap.yaml     # Config non sensible (hôte DB, port, nom)
-│   ├── secret.yaml        # Mot de passe DB (Kubernetes Secret)
-│   ├── deployment-backend.yaml
-│   ├── service-backend.yaml    # NodePort 30080
+│   ├── configmap.yaml          # Config non sensible (hôte, port, nom DB)
+│   ├── secret.yaml             # Credentials DB (user + password)
+│   ├── deployment-backend.yaml # 3 replicas, probes, resources
+│   ├── service-backend.yaml    # NodePort :30080
 │   ├── deployment-postgres.yaml
-│   └── service-postgres.yaml   # ClusterIP interne
+│   ├── service-postgres.yaml   # ClusterIP interne
+│   ├── ingress.yaml            # Nginx Ingress (todo-api.local)
+│   └── hpa.yaml                # HorizontalPodAutoscaler (2–5 pods, CPU 70%)
 ├── .dockerignore
 ├── .gitignore
 ├── CHANGELOG.md
@@ -181,7 +230,13 @@ image: <votre-registry>/todo-backend:1.0.0
 powershell -ExecutionPolicy Bypass -File .\start.ps1 -Target k8s
 ```
 
-Ou manuellement dans l'ordre :
+Ou appliquer l'intégralité du dossier `k8s/` en une seule commande `kubectl` :
+
+```bash
+kubectl apply -f k8s/
+```
+
+Ou dans l'ordre explicite :
 
 ```bash
 kubectl apply -f k8s/configmap.yaml
@@ -190,58 +245,156 @@ kubectl apply -f k8s/deployment-postgres.yaml
 kubectl apply -f k8s/service-postgres.yaml
 kubectl apply -f k8s/deployment-backend.yaml
 kubectl apply -f k8s/service-backend.yaml
+kubectl apply -f k8s/ingress.yaml
+kubectl apply -f k8s/hpa.yaml
 ```
 
-### 3. Architecture Kubernetes
+### 3. Ressources Kubernetes déployées
 
-```
-┌───────────────────────────────────────────────────────┐
-│                    Kubernetes Cluster                  │
-│                                                        │
-│  ┌─────────────────────────────────────────────────┐  │
-│  │  ConfigMap: todo-config                         │  │
-│  │  Secret:    todo-secrets                        │  │
-│  └─────────────────────────────────────────────────┘  │
-│                                                        │
-│  ┌──────────────────┐       ┌──────────────────────┐  │
-│  │ Deployment       │       │ Deployment           │  │
-│  │ todo-backend     │──────▶│ todo-postgres        │  │
-│  │ (1 replica)      │       │ (1 replica)          │  │
-│  └──────────────────┘       └──────────────────────┘  │
-│           │                           │                │
-│  ┌──────────────────┐       ┌──────────────────────┐  │
-│  │ Service          │       │ Service              │  │
-│  │ NodePort :30080  │       │ ClusterIP :5432      │  │
-│  └──────────────────┘       └──────────────────────┘  │
-│           │                                            │
-└───────────┼────────────────────────────────────────────┘
-            │
-      <node-ip>:30080
-```
+| Ressource | Fichier | Détail |
+|---|---|---|
+| ConfigMap | `configmap.yaml` | DB_HOST, DB_PORT, DB_NAME |
+| Secret | `secret.yaml` | DB_USER, DB_PASSWORD, POSTGRES_PASSWORD |
+| Deployment backend | `deployment-backend.yaml` | 3 replicas, probes, CPU/mem limits |
+| Service backend | `service-backend.yaml` | NodePort :30080 |
+| Deployment postgres | `deployment-postgres.yaml` | 1 replica |
+| Service postgres | `service-postgres.yaml` | ClusterIP :5432 |
+| Ingress | `ingress.yaml` | Nginx, `todo-api.local` |
+| HPA | `hpa.yaml` | 2–5 pods, seuil 70% CPU |
 
 ### 4. Accéder à l'API
 
 ```bash
-# Minikube
+# Via NodePort (sans Ingress)
 curl http://$(minikube ip):30080/tasks
 
-# Autre cluster
-kubectl get nodes -o wide   # récupérer l'IP du node
-curl http://<node-ip>:30080/tasks
+# Via Ingress (après activation nginx + ajout dans /etc/hosts)
+# Linux/macOS : echo "$(minikube ip)  todo-api.local" >> /etc/hosts
+# Windows     : ajouter "<minikube-ip>  todo-api.local" dans
+#               C:\Windows\System32\drivers\etc\hosts
+curl http://todo-api.local/tasks
 ```
 
-### 5. Vérifier le déploiement
+### 5. Commandes de supervision
 
 ```bash
+# Vue d'ensemble des pods (avec statut readiness)
 kubectl get pods
-kubectl get svc
+
+# Vue d'ensemble des services
+kubectl get services
+
+# État du HPA (replicas courants vs cible)
+kubectl get hpa
+
+# Logs du backend
 kubectl logs deployment/todo-backend
+
+# Détails d'un pod (utile pour diagnostiquer les probes)
+kubectl describe pod -l app=todo-backend
 ```
 
 ### 6. Supprimer le déploiement
 
 ```bash
 kubectl delete -f k8s/
+```
+
+---
+
+## Pourquoi Kubernetes ?
+
+Kubernetes n'est pas seulement un outil de déploiement : c'est une plateforme d'orchestration qui répond à des problématiques réelles en environnement de production.
+
+### Scalabilité
+
+Dans une entreprise comme Naval Group, un pic de charge (fin de journée, déploiement massif) peut multiplier le trafic par 10 en quelques secondes. Kubernetes permet de répondre à cela de deux façons :
+
+- **Horizontale (HPA)** : ajoute automatiquement des pods selon l'utilisation CPU/mémoire, sans interruption de service.
+- **Manuelle instantanée** : `kubectl scale deployment/todo-backend --replicas=10` suffit pour absorber un pic.
+
+### Haute disponibilité
+
+Avec 3 replicas, si un pod crashe (OOM, exception non gérée), Kubernetes en redémarre un automatiquement pendant que les 2 autres continuent à servir le trafic. Les probes `readiness` et `liveness` garantissent qu'aucune requête n'est routée vers un pod non prêt.
+
+### Gestion de la configuration
+
+Le découplage `ConfigMap` / `Secret` / code applicatif permet de :
+
+- Modifier la configuration sans reconstruire l'image Docker
+- Appliquer des valeurs différentes selon l'environnement (dev / staging / prod) sans toucher au code
+- Restreindre l'accès aux secrets via RBAC Kubernetes
+
+### Auto-guérison
+
+Si un nœud tombe en panne, Kubernetes reprogramme les pods sur un autre nœud disponible automatiquement, sans intervention humaine.
+
+---
+
+## Démonstration
+
+Cette section décrit comment tester l'API en conditions réelles, que ce soit avec Docker Compose ou Kubernetes.
+
+### 1. Démarrer la stack Docker (développement)
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\start.ps1
+```
+
+### 2. Lancer la suite de tests automatisés
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\test-api.ps1
+```
+
+Résultat attendu :
+
+```
+[INFO] Base URL: http://localhost:5000
+[PASS] GET /health retourne 200 et status=ok
+[PASS] GET /tasks retourne 200 et un tableau
+[PASS] POST /tasks cree une tache
+[PASS] GET /tasks contient la tache creee
+[PASS] DELETE /tasks/<id> supprime la tache
+[PASS] DELETE /tasks/999999 retourne 404
+[PASS] POST /tasks avec titre vide retourne 400
+[RESULT] Tous les tests sont passes
+```
+
+### 3. Tests manuels curl
+
+```bash
+# Créer plusieurs tâches
+curl -s -X POST http://localhost:5000/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Déployer sur Kubernetes"}' | python -m json.tool
+
+curl -s -X POST http://localhost:5000/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Configurer le CI/CD"}' | python -m json.tool
+
+# Lister toutes les tâches
+curl -s http://localhost:5000/tasks | python -m json.tool
+
+# Supprimer la première tâche
+curl -s -X DELETE http://localhost:5000/tasks/1
+
+# Vérifier la suppression
+curl -s http://localhost:5000/tasks | python -m json.tool
+```
+
+### 4. Tester le HPA sur Kubernetes (simulation de charge)
+
+```bash
+# Dans un premier terminal : générer de la charge
+kubectl run load-generator --image=busybox --restart=Never -- \
+  /bin/sh -c "while true; do wget -q -O- http://todo-backend-service:5000/tasks; done"
+
+# Dans un second terminal : observer le HPA scaler
+kubectl get hpa todo-backend-hpa --watch
+
+# Arrêter la charge
+kubectl delete pod load-generator
 ```
 
 ---
@@ -303,4 +456,3 @@ La suite `test-api.ps1` couvre 7 cas :
 | `DB_NAME`     | `todo_db`   | Nom de la base           |
 
 > En production, ne jamais stocker les mots de passe en clair. Utiliser un gestionnaire de secrets (Kubernetes Secret + RBAC, HashiCorp Vault, etc.).
-```

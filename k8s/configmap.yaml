@@ -5,7 +5,8 @@ metadata:
   labels:
     app: todo-api
 data:
+  # Données non sensibles uniquement : hôte, port, nom de la base.
+  # Les credentials (DB_USER, DB_PASSWORD) sont dans le Secret.
   DB_HOST: postgres-service
   DB_PORT: "5432"
   DB_NAME: todo_db
-  DB_USER: postgres

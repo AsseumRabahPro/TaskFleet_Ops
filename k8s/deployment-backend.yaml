@@ -5,7 +5,10 @@ metadata:
   labels:
     app: todo-backend
 spec:
-  replicas: 1
+  # 3 replicas pour la haute disponibilité.
+  # Note: ce champ est piloté dynamiquement par le HPA (hpa.yaml)
+  # une fois celui-ci déployé.
+  replicas: 3
   selector:
     matchLabels:
       app: todo-backend
@@ -20,8 +23,42 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 5000
+
+          # ── Ressources ────────────────────────────────────────────────
+          # requests : ce que Kubernetes réserve sur le nœud.
+          # limits   : le plafond autorisé (OOM kill si dépassé pour memory).
+          resources:
+            requests:
+              cpu: "100m"      # 0.1 vCPU garanti
+              memory: "128Mi"
+            limits:
+              cpu: "250m"      # 0.25 vCPU maximum
+              memory: "256Mi"
+
+          # ── Readiness Probe ───────────────────────────────────────────
+          # Kubernetes n'envoie du trafic au pod que lorsque /health répond 200.
+          # Évite d'envoyer des requêtes à un pod dont la DB n'est pas prête.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+
+          # ── Liveness Probe ────────────────────────────────────────────
+          # Kubernetes redémarre le pod si /health ne répond plus.
+          # Permet une autoguérison sans intervention manuelle.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            failureThreshold: 3
+
           env:
-            # DB connection is injected via ConfigMap + Secret.
+            # ── Variables non sensibles issues du ConfigMap ───────────
             - name: DB_HOST
               valueFrom:
                 configMapKeyRef:
@@ -37,10 +74,11 @@ spec:
                 configMapKeyRef:
                   name: todo-config
                   key: DB_NAME
+            # ── Credentials issus du Secret (chiffrés dans etcd) ─────
             - name: DB_USER
               valueFrom:
-                configMapKeyRef:
-                  name: todo-config
+                secretKeyRef:
+                  name: todo-secrets
                   key: DB_USER
             - name: DB_PASSWORD
               valueFrom:

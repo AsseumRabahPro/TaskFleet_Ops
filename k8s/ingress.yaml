@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: todo-ingress
+  labels:
+    app: todo-api
+  annotations:
+    # Utilise le contrôleur Nginx (à activer avec : minikube addons enable ingress)
+    kubernetes.io/ingress.class: "nginx"
+    # Redirige automatiquement HTTP → HTTPS (désactivé ici pour démo locale)
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  rules:
+    # Hôte local pour les tests avec Minikube.
+    # Ajouter dans /etc/hosts (Linux/macOS) ou C:\Windows\System32\drivers\etc\hosts (Windows) :
+    #   <minikube-ip>  todo-api.local
+    - host: todo-api.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                # Correspond au Service NodePort existant (port cluster-interne 5000)
+                name: todo-backend-service
+                port:
+                  number: 5000

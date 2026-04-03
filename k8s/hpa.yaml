@@ -1,0 +1,37 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: todo-backend-hpa
+  labels:
+    app: todo-backend
+spec:
+  # Cible le Deployment du backend
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: todo-backend
+
+  # Fourchette de replicas gérée automatiquement.
+  # Le Deployment démarre avec 3 replicas ; le HPA prend le contrôle dès son application.
+  minReplicas: 2
+  maxReplicas: 5
+
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          # Scale up dès que la consommation CPU moyenne dépasse 70 % des requests.
+          # Exemple : si requests.cpu = 100m, scale up au-dessus de 70m moyen par pod.
+          type: Utilization
+          averageUtilization: 70
+
+# Fonctionnement :
+# 1. Le Metrics Server collecte la consommation CPU de chaque pod toutes les 15s.
+# 2. Le HPA Controller (loop 30s) calcule : replicas_cibles = ceil(conso_actuelle / cible)
+# 3. Si conso > 70% → scale up (max 5 pods)
+#    Si conso < 70% depuis 5 min → scale down (min 2 pods)
+# 4. Le Deployment met à jour le nombre de replicas automatiquement.
+#
+# Prérequis : Metrics Server doit être actif dans le cluster.
+#   Minikube : minikube addons enable metrics-server

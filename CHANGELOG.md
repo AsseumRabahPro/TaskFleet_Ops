@@ -7,6 +7,32 @@ Ce projet suit le [Semantic Versioning](https://semver.org/lang/fr/).
 
 ---
 
+## [1.1.0] — 2026-04-03
+
+### Ajouté
+
+#### Kubernetes — Scalabilité et haute disponibilité
+- `deployment-backend.yaml` : passage à 3 replicas
+- `deployment-backend.yaml` : `resources.requests` (cpu: 100m, memory: 128Mi) et `limits` (cpu: 250m, memory: 256Mi)
+- `deployment-backend.yaml` : `readinessProbe` sur `GET /health` (initialDelay 10s, period 10s)
+- `deployment-backend.yaml` : `livenessProbe` sur `GET /health` (initialDelay 20s, period 15s)
+- `ingress.yaml` : Nginx Ingress compatible Minikube, hôte `todo-api.local`
+- `hpa.yaml` : HorizontalPodAutoscaler v2, 2–5 replicas, seuil CPU 70%
+
+#### Sécurité
+- `DB_USER` migré du ConfigMap vers le Secret (tous les credentials groupés dans le même Secret)
+- Commentaires explicatifs dans ConfigMap et Secret sur la séparation config/secrets
+
+#### Documentation
+- Section "Architecture" avec schéma ASCII complet (Ingress → HPA → Pods → PostgreSQL)
+- Section "Pourquoi Kubernetes ?" (scalabilité, haute disponibilité, gestion config, auto-guérison)
+- Section "Démonstration" (tests Docker, tests manuels curl, simulation de charge HPA)
+- Tableau de toutes les ressources Kubernetes déployées
+- Commandes : `kubectl apply -f k8s/`, `kubectl get pods`, `kubectl get services`, `kubectl get hpa`
+- Table des matières mise à jour (12 sections)
+
+---
+
 ## [1.0.0] — 2026-04-03
 
 ### Ajouté
