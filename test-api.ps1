@@ -28,12 +28,27 @@ function Invoke-ApiRequest {
 
     $url = "$BaseUrl$Path"
 
-    try {
-        if ($Body) {
-            $response = Invoke-WebRequest -UseBasicParsing -Method $Method -Uri $url -ContentType "application/json" -Body $Body
-        } else {
-            $response = Invoke-WebRequest -UseBasicParsing -Method $Method -Uri $url
+    $baseParams = @{
+        Method = $Method
+        Uri = $url
+    }
+
+    if ($Body) {
+        $baseParams["ContentType"] = "application/json"
+        $baseParams["Body"] = $Body
+    }
+
+    # PowerShell 7+ supports -SkipHttpErrorCheck, which avoids exceptions on 4xx/5xx.
+    if ((Get-Command Invoke-WebRequest).Parameters.ContainsKey("SkipHttpErrorCheck")) {
+        $response = Invoke-WebRequest @baseParams -SkipHttpErrorCheck
+        return [PSCustomObject]@{
+            StatusCode = [int]$response.StatusCode
+            Body = [string]$response.Content
         }
+    }
+
+    try {
+        $response = Invoke-WebRequest @baseParams -UseBasicParsing
 
         return [PSCustomObject]@{
             StatusCode = [int]$response.StatusCode
@@ -49,22 +64,29 @@ function Invoke-ApiRequest {
         $errorBody = ""
         $statusCode = 0
 
+        # Prefer ErrorDetails when available (most reliable across runtimes).
+        if ($null -ne $_.ErrorDetails -and -not [string]::IsNullOrEmpty($_.ErrorDetails.Message)) {
+            $errorBody = $_.ErrorDetails.Message
+        }
+
         # PowerShell 7 (Linux/macOS runner): HttpResponseMessage
         if ($resp.GetType().FullName -eq "System.Net.Http.HttpResponseMessage") {
             $statusCode = [int]$resp.StatusCode
-            if ($null -ne $resp.Content) {
+            if ([string]::IsNullOrEmpty($errorBody) -and $null -ne $resp.Content) {
                 $errorBody = $resp.Content.ReadAsStringAsync().GetAwaiter().GetResult()
             }
         }
         # Windows PowerShell: HttpWebResponse with GetResponseStream()
         elseif ($resp.PSObject.Methods.Name -contains "GetResponseStream") {
             $statusCode = [int]$resp.StatusCode
-            $reader = New-Object System.IO.StreamReader($resp.GetResponseStream())
-            $errorBody = $reader.ReadToEnd()
+            if ([string]::IsNullOrEmpty($errorBody)) {
+                $reader = New-Object System.IO.StreamReader($resp.GetResponseStream())
+                $errorBody = $reader.ReadToEnd()
+            }
         }
         else {
             $statusCode = [int]$resp.StatusCode
-            if ($null -ne $resp.Content) {
+            if ([string]::IsNullOrEmpty($errorBody) -and $null -ne $resp.Content) {
                 $errorBody = [string]$resp.Content
             }
         }
