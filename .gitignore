@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environnement
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Docker
+.docker/
+
+# Kubernetes — ne jamais committer de vraies valeurs sensibles
+# (Le secret.yaml inclus ici est à titre de démonstration uniquement)
+
+# Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Distribution / packaging
+*.tar.gz
+*.zip

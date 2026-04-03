@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todo-backend
+  labels:
+    app: todo-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: todo-backend
+  template:
+    metadata:
+      labels:
+        app: todo-backend
+    spec:
+      containers:
+        - name: backend
+          image: todo-backend:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+          env:
+            # DB connection is injected via ConfigMap + Secret.
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: todo-config
+                  key: DB_HOST
+            - name: DB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: todo-config
+                  key: DB_PORT
+            - name: DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: todo-config
+                  key: DB_NAME
+            - name: DB_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: todo-config
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: todo-secrets
+                  key: DB_PASSWORD
